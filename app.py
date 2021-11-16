@@ -1,16 +1,19 @@
+# Importing Libraries
 import os
 import re
 import urllib.request
 
-import matplotlib
-import matplotlib.pyplot as plt
-import requests
 from bs4 import BeautifulSoup as Soup
 from flask import Flask, render_template, request, Response
 from flask_cors import cross_origin
 from flask_ngrok import run_with_ngrok
 from pandas import DataFrame
 from wordcloud import WordCloud, STOPWORDS
+
+import matplotlib
+import matplotlib.pyplot as plt
+import requests
+# Libraries Import ended
 
 wd = './static/'
 IMG_FOLDER = wd + 'images/'
@@ -25,12 +28,8 @@ app.config['CSV_FOLDER'] = CSV_FOLDER
 
 class DataCollection:
     def __init__(self):
-        self.data = {"Product": list(),
-                     "Name": list(),
-                     "Price": list(),
-                     "Rating": list(),
-                     "Comment Heading": list(),
-                     "Comment": list()}
+        self.data = {"Product": list(), "Name": list(), "Price": list(
+        ), "Rating": list(), "Comment Heading": list(), "Comment": list()}
 
     def get_main_html(self, base_url=None, search_string=None, vendor=None):
         if vendor == 'flipkart':
@@ -38,11 +37,13 @@ class DataCollection:
             print(search_url)
         elif vendor == 'walmart':
             search_url = f"{base_url}/search/?q={search_string}"
+        elif vendor == 'snapdeal':
+            search_url = f"{base_url}/search?keyword={search_string}"
         else:
             search_url = f"{base_url}/s?k={search_string}"
         print(search_url)
 
-        if vendor == 'walmart':
+        if vendor == 'snapdeal':
             headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
                               "Chrome/86.0.4240.183 Safari/537.36"}
@@ -59,7 +60,6 @@ class DataCollection:
             with urllib.request.urlopen(search_url) as url:
                 page = url.read()
             # print(Soup(page, "html.parser").prettify())
-            print("hello", page)
             return Soup(page, "html.parser")
 
     def get_prod_html(self, product_link=None):
@@ -68,17 +68,14 @@ class DataCollection:
                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", "DNT": "1",
                    "Connection": "close",
                    "Upgrade-Insecure-Requests": "1"}
+        # print(product_link)
         prod_page = requests.get(product_link, headers=headers)
         return Soup(prod_page.content, "html.parser")
 
     def get_product_name_links(self, base_url=None, big_boxes=None):
         temp = []
-        i = 1
-        for box in big_boxes:
 
-            print(i)
-            print(box)
-            print(type(box))
+        for box in big_boxes:
             if base_url == 'https://www.walmart.com':
                 try:
                     temp.append((box.img['alt'],
@@ -86,7 +83,22 @@ class DataCollection:
                 except:
                     pass
             elif base_url == "https://www.snapdeal.com":
-                link = re.findall(box['href'])
+                try:
+                    # print("snapdeal")
+                    link = box["href"]
+                    name = box.picture.img['title']
+                    idx = 0
+                    for i in link:
+                        if(i == '#'):
+                            break
+                        else:
+                            idx = idx+1
+                    link = link[0:idx]
+                    link += '/reviews'
+                    # print(name, link)
+                    temp.append((name, link))
+                except:
+                    pass
             elif base_url == 'https://www.flipkart.com':
                 link = re.findall(re.compile(r'\/.+\/p\/.+\?pid=.{16}&lid=.{25}'),
                                   box['href'])[0]
@@ -115,15 +127,38 @@ class DataCollection:
                                  base_url + box["href"]))
                 except:
                     pass
-        print("hello", temp)
-        i += 1
+        # print(temp)
         return temp
 
-    def get_final_data(self, comment_box=None, prod_name=None, prod_price=None, vendor=None):
+    def get_final_data(self, comment_box=None, prod_name="NO Name", prod_price="No Price", vendor=None):
 
-        self.data["Product"].append(prod_name)
-        self.data["Price"].append(prod_price)
-        if vendor == 'flipkart':
+        if vendor == "snapdeal":
+            self.data["Product"].append(prod_name)
+            self.data["Price"].append(prod_price)
+            print("FInal Data")
+            try:
+                self.data["Name"].append(comment_box.find_all(
+                    'div', {'class': '_reviewUserName'})[0].text)
+            except:
+                self.data["Name"].append("No Name")
+            try:
+                rating = comment_box.find_all(
+                    'i', {'class': 'sd-icon sd-icon-star active'})
+                print(rating)
+                self.data['Rating'].append(len(rating))
+            except:
+                self.data['Rating'].append("NO Rating")
+            try:
+                self.data["Comment Heading"].append(
+                    comment_box.find_all('div', {'class': "head"})[0].text)
+            except:
+                self.data["Comment Heading"].append("NO Comment Heading")
+            try:
+                self.data["Comment"].append(comment_box.find_all('p')[0].text)
+            except:
+                self.data["Comment"].append("NO Comment")
+
+        elif vendor == 'flipkart':
             try:
                 self.data["Name"].append(comment_box.find_all(
                     'p', {'class': '_2sc7ZR _2V5EHH'})[0].text)
@@ -282,11 +317,14 @@ def index():
 
             query_html = get_data.get_main_html(
                 base_url, search_string, vendor)
-            print(query_html)
+           # print(query_html)
 
             if vendor == 'flipkart':
                 big_boxes = query_html.find_all(
                     "a", {"href": re.compile(r"\/.+\/p\/.+qH=.+")})
+            elif vendor == "snapdeal":
+                big_boxes = query_html.find_all(
+                    "a", {"href": re.compile(r"https://www.snapdeal.com/product/.+")})
 
             elif vendor == 'walmart':
                 big_boxes = query_html.find_all('div', {'data-type': 'items'})
@@ -297,15 +335,28 @@ def index():
             else:
                 big_boxes = query_html.find_all("a", {"class": "a-link-normal s-no-outline",
                                                       'href': re.compile(r'\/.+\/dp\/.+?dchild=1.*')})
-            print(big_boxes)
+           # print("hello big boxes", big_boxes[0])
             product_name_links = get_data.get_product_name_links(
                 base_url, big_boxes)
-            print('\n', "hello product link", product_name_links)
+            print("hello product link", product_name_links)
+            total = 0
+            data = get_data.get_data_dict()
+            print(len(data["Name"]), len(data["Price"]), len(data["Rating"]), len(
+                data["Product"]), len(data["Comment Heading"]), len(data["Comment"]))
+
             for prod_name, product_link in product_name_links[:4]:
                 for prod_html in get_data.get_prod_html(product_link):
                     try:
                         prod_price = ''
-                        if vendor == 'flipkart':
+                        if vendor == "snapdeal":
+                            # print("snapdeal")
+                            comment_boxes = prod_html.find_all(
+                                'div', {"class": "user-review"})
+                            print(comment_boxes[0])
+                            prod_price = prod_html.find_all(
+                                'p', {"class": "product-offer-price"})[0].text
+                            # print(prod_price)
+                        elif vendor == 'flipkart':
                             comment_boxes = prod_html.find_all(
                                 'div', {'class': '_27M-vq'})[:2]
                             headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:66.0) Gecko/20100101"
@@ -386,11 +437,15 @@ def index():
                         if vendor == 'walmart':
                             prod_price = float((prod_price.replace("$", "")).replace(
                                 ",", "").replace(" ", ""))
+                        elif vendor == "snapdeal":
+                            pass
                         else:
                             prod_price = float((prod_price.replace("₹", "")).replace(
                                 ",", "").replace(" ", ""))
                         # print(prod_price)
+
                         for comment_box in comment_boxes:
+                            total += 1
                             get_data.get_final_data(
                                 comment_box, prod_name, prod_price, vendor)
 
@@ -398,6 +453,11 @@ def index():
                         pass
             # save the data as gathered in dataframe
             global df
+            print(total)
+            print("dataframe")
+            data = get_data.get_data_dict()
+            print(len(data["Name"]), len(data["Price"]), len(data["Rating"]), len(
+                data["Product"]), len(data["Comment Heading"]), len(data["Comment"]))
             df = DataFrame(get_data.get_data_dict())
             # save dataframe as a csv which will be availble to download
             download_path = get_data.save_as_dataframe(
