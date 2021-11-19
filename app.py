@@ -36,12 +36,12 @@ class ReviewScrapper:
         # Selecting The Website Link based on the shop name
         if shop == 'flipkart':
             search_url = f"{base_url}/search?q={search_string}"
-            print(search_url)
+            # print(search_url)
         elif shop == 'snapdeal':
             search_url = f"{base_url}/search?keyword={search_string}"
         else:
             search_url = f"{base_url}/s?k={search_string}"
-        print(search_url)
+        # print(search_url)
 
         if shop == 'snapdeal':
             headers = {
@@ -155,19 +155,21 @@ class ReviewScrapper:
                 self.data["Comment"].append("NO Comment")
 
         elif shop == 'flipkart':
+            self.data["Product"].append(prod_name)
+            self.data["Price"].append(prod_price)
             try:
                 self.data["Name"].append(comment_box.find_all(
-                    'p', {'class': '_2sc7ZR _2V5EHH'})[0].text)
+                    'p', {'class': '_2mcZGG'})[0].text)
             except:
                 self.data["Name"].append('No Name')
 
             try:
                 try:
                     self.data["Rating"].append(comment_box.find_all(
-                        'div', {'class': '_3LWZlK _1BLPMq'})[0].text)
+                        'div', {'class': '_3LWZlK _1BLPMq _3B8WaH'})[0].text)
                 except:
                     self.data["Rating"].append(
-                        comment_box.find_all('div', {'class': '_3LWZlK _1rdVr6 _1BLPMq'})[0].text)
+                        comment_box.find_all('div', {'class': '_3LWZlK _1BLPMq _3B8WaH'})[0].text)
             except:
                 self.data["Rating"].append('No Rating')
 
@@ -181,7 +183,7 @@ class ReviewScrapper:
                 self.data["Comment"].append(comment_box.find_all('div', {'class': 't-ZTKy'})[0].text
                                             .replace('READ MORE', ''))
             except:
-                self.data["Comment"].append('')
+                self.data["Comment"].append('NO')
 
         else:
             try:
@@ -303,10 +305,10 @@ def index():
             else:
                 big_boxes = query_html.find_all("a", {"class": "a-link-normal s-no-outline",
                                                       'href': re.compile(r'\/.+\/dp\/.+?dchild=1.*')})
-            print("hello big boxes", big_boxes)
+            #print("hello big boxes", big_boxes)
             product_name_links = get_data.ProductLinks(
                 base_url, big_boxes)
-            print("hello product link", product_name_links)
+            #print("hello product link", product_name_links)
             total = 0
             data = get_data.FinalData()
             print(len(data["Name"]), len(data["Price"]), len(data["Rating"]), len(
